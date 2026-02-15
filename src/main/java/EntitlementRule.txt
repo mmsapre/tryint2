@@ -1,0 +1,34 @@
+package com.mmsapre.semantic.model;
+
+import java.util.List;
+import java.util.Map;
+
+public record EntitlementRule(
+    String entityType,
+    String entityId,
+    Map<String, Object> tags,
+    Map<String, Object> restrictions,
+    int priority
+) {
+  @SuppressWarnings("unchecked")
+  public List<String> allowedClouds() {
+    Object o = restrictions == null ? null : restrictions.get("allowedClouds");
+    return (o instanceof List<?> l) ? (List<String>) l : List.of();
+  }
+
+  @SuppressWarnings("unchecked")
+  public List<String> allowedRegions() {
+    Object o = restrictions == null ? null : restrictions.get("allowedRegions");
+    return (o instanceof List<?> l) ? (List<String>) l : List.of();
+  }
+
+  public boolean sanctioned() { return tags != null && Boolean.TRUE.equals(tags.get("sanctioned")); }
+  public boolean frozen() { return tags != null && Boolean.TRUE.equals(tags.get("frozen")); }
+  public boolean blocked() { return tags != null && Boolean.TRUE.equals(tags.get("blocked")); }
+
+  @SuppressWarnings("unchecked")
+  public Map<String, Object> license() {
+    Object o = restrictions == null ? null : restrictions.get("license");
+    return (o instanceof Map<?,?> m) ? (Map<String,Object>) m : Map.of();
+  }
+}
