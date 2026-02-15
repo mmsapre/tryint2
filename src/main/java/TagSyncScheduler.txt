@@ -1,0 +1,25 @@
+package com.mmsapre.semantic.store;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+@Component
+public class TagSyncScheduler {
+
+  private final PostgresTagDao pg;
+  private final TagStore store;
+
+  public TagSyncScheduler(PostgresTagDao pg, TagStore store) {
+    this.pg = pg;
+    this.store = store;
+  }
+
+  @Scheduled(fixedDelayString = "${tag.sync.ms:30000}")
+  public void sync() {
+    for (var r : pg.fetchAll()) {
+      String key = r.dataset() + ":" + r.entityId();
+      store.put(key, pg.parseTags(r.tagsJson()));
+    }
+  }
+}
