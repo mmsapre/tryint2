@@ -1,0 +1,28 @@
+package com.mmsapre.semantic.intent;
+
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.model.IntentResult;
+import com.mmsapre.semantic.model.RequestFacts;
+import org.springframework.stereotype.Component;
+
+@Component
+public class CompositeIntentClassifier {
+
+  private final RuleIntentClassifier rules;
+  private final AiIntentClassifier ai;
+  private final PolicyProperties props;
+
+  public CompositeIntentClassifier(RuleIntentClassifier rules, AiIntentClassifier ai, PolicyProperties props) {
+    this.rules = rules;
+    this.ai = ai;
+    this.props = props;
+  }
+
+  public IntentResult classify(RequestFacts f) {
+    IntentResult r = rules.classify(f);
+    // If strong confidence, keep it.
+    if (r.confidence() >= Math.max(props.getConfidenceThreshold(), 0.85)) return r;
+    // else consult AI plugin
+    return ai.classify(f);
+  }
+}
