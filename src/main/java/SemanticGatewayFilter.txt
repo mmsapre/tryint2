@@ -1,0 +1,99 @@
+package com.mmsapre.semantic.gateway;
+
+import com.mmsapre.semantic.engine.ObfuscationEngine;
+import com.mmsapre.semantic.engine.PolicyDecisionService;
+import com.mmsapre.semantic.extract.BodyCachingFilter;
+import com.mmsapre.semantic.extract.RequestFactsExtractor;
+import com.mmsapre.semantic.extract.SubjectExtractor;
+import com.mmsapre.semantic.model.AuthorizationDecision;
+import org.reactivestreams.Publisher;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.*;
+import org.springframework.http.*;
+import org.springframework.http.server.reactive.*;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.*;
+
+import java.nio.charset.StandardCharsets;
+
+@Component
+public class SemanticGatewayFilter implements GlobalFilter, Ordered {
+
+  private final BodyCachingFilter bodyCache;
+  private final SubjectExtractor subjectExtractor;
+  private final RequestFactsExtractor factsExtractor;
+  private final PolicyDecisionService decisionService;
+  private final ObfuscationEngine obfuscation;
+
+  public SemanticGatewayFilter(BodyCachingFilter bodyCache,
+                              SubjectExtractor subjectExtractor,
+                              RequestFactsExtractor factsExtractor,
+                              PolicyDecisionService decisionService,
+                              ObfuscationEngine obfuscation) {
+    this.bodyCache = bodyCache;
+    this.subjectExtractor = subjectExtractor;
+    this.factsExtractor = factsExtractor;
+    this.decisionService = decisionService;
+    this.obfuscation = obfuscation;
+  }
+
+  @Override public int getOrder() { return -50; }
+
+  @Override
+  public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+    return bodyCache.cache(exchange)
+        .flatMap(ex -> {
+          var subject = subjectExtractor.extract(ex);
+          var facts = factsExtractor.extract(ex);
+          AuthorizationDecision d = decisionService.decide(subject, facts);
+
+          if (!d.allow()) {
+            ex.getResponse().setStatusCode(d.pendingApproval() ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN);
+            byte[] b = ("{\"error\":\"" + d.reason() + "\"}").getBytes(StandardCharsets.UTF_8);
+            ex.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            return ex.getResponse().writeWith(Mono.just(ex.getResponse().bufferFactory().wrap(b)));
+          }
+
+          if (!d.obfuscate()) {
+            return chain.filter(ex);
+          }
+
+          ServerHttpResponse original = ex.getResponse();
+          DataBufferFactory bf = original.bufferFactory();
+
+          ServerHttpResponseDecorator decorated = new ServerHttpResponseDecorator(original) {
+            @Override
+            public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
+              if (getStatusCode() != null && getStatusCode().is2xxSuccessful()
+                  && original.getHeaders().getContentType() != null
+                  && original.getHeaders().getContentType().includes(MediaType.APPLICATION_JSON)) {
+
+                Flux<? extends DataBuffer> flux = Flux.from(body);
+
+                return super.writeWith(flux
+                    .collectList()
+                    .flatMapMany(list -> {
+                      DataBuffer joined = bf.join(list);
+                      byte[] bytes = new byte[joined.readableByteCount()];
+                      joined.read(bytes);
+                      DataBufferUtils.release(joined);
+
+                      String json = new String(bytes, StandardCharsets.UTF_8);
+                      String out = obfuscation.obfuscateJson(json, d.fieldTransforms());
+
+                      byte[] outBytes = out.getBytes(StandardCharsets.UTF_8);
+                      original.getHeaders().setContentLength(outBytes.length);
+                      return Flux.just(bf.wrap(outBytes));
+                    }));
+              }
+              return super.writeWith(body);
+            }
+          };
+
+          return chain.filter(ex.mutate().response(decorated).build());
+        });
+  }
+}
