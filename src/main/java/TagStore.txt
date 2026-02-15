@@ -1,0 +1,8 @@
+package com.mmsapre.semantic.store;
+
+import java.util.Map;
+
+public interface TagStore {
+  Map<String, Object> get(String key);
+  void put(String key, Map<String, Object> value);
+}
