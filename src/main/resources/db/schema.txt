@@ -1,0 +1,28 @@
+create table if not exists semantic_entity_tags (
+  id bigserial primary key,
+  dataset text not null,
+  entity_id text not null,
+  tags jsonb not null
+);
+
+create table if not exists semantic_decision_audit (
+  id bigserial primary key,
+  ts timestamptz not null default now(),
+  request_id text,
+  decision jsonb not null
+);
+
+create table if not exists semantic_graph_edge_weight (
+  edge_key text primary key,
+  weight double precision not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists semantic_graph_feedback (
+  id bigserial primary key,
+  ts timestamptz not null default now(),
+  request_id text,
+  predicted jsonb,
+  corrected jsonb,
+  reward double precision
+);
