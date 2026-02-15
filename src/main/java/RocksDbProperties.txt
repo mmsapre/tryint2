@@ -1,0 +1,10 @@
+package com.mmsapre.semantic.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "rocksdb")
+public class RocksDbProperties {
+  private String path = "./tagdb";
+  public String getPath() { return path; }
+  public void setPath(String path) { this.path = path; }
+}
