@@ -1,0 +1,35 @@
+package com.mmsapre.semantic.admin;
+
+import com.mmsapre.semantic.store.PostgresEntitlementDao;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/admin/entitlements")
+public class EntitlementAdminController {
+
+  private final PostgresEntitlementDao dao;
+
+  public EntitlementAdminController(PostgresEntitlementDao dao) { this.dao = dao; }
+
+  /**
+   * POST body example:
+   * {
+   *   "entityType":"INSTRUMENT",
+   *   "entityId":"US0378331005",
+   *   "rules":{
+   *     "tags":{"sanctioned":false,"frozen":false,"blocked":false},
+   *     "restrictions":{"allowedClouds":["internal"],"allowedRegions":["EU","IN"],"license":{"allowExternal":false}},
+   *     "priority":100
+   *   }
+   * }
+   */
+  @PostMapping
+  public void upsert(@RequestBody Map<String,Object> body) {
+    String entityType = String.valueOf(body.get("entityType"));
+    String entityId = String.valueOf(body.get("entityId"));
+    Map<String,Object> rules = (Map<String,Object>) body.get("rules");
+    dao.upsert(entityType, entityId, rules);
+  }
+}
