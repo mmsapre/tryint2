@@ -1,0 +1,25 @@
+package com.mmsapre.semantic.store;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mmsapre.semantic.model.AuthorizationDecision;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+@Component
+public class AuditDao {
+
+  private final JdbcTemplate jdbc;
+  private final ObjectMapper om;
+
+  public AuditDao(JdbcTemplate jdbc, ObjectMapper om) {
+    this.jdbc = jdbc;
+    this.om = om;
+  }
+
+  public void audit(String requestId, AuthorizationDecision d) {
+    try {
+      jdbc.update("insert into semantic_decision_audit(request_id, decision) values (?, ?::jsonb)",
+          requestId, om.writeValueAsString(d));
+    } catch (Exception ignored) {}
+  }
+}
