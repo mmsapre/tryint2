@@ -1,0 +1,38 @@
+package com.mmsapre.semantic.engine;
+
+import com.mmsapre.semantic.model.TagDecision;
+import com.mmsapre.semantic.store.TagStore;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+@Component
+public class TagPolicyEngine {
+
+  private final TagStore store;
+
+  public TagPolicyEngine(TagStore store) { this.store = store; }
+
+  public TagDecision evaluate(String dataset, String entityId, String platform) {
+    Map<String,Object> tags = store.get(dataset + ":" + entityId);
+
+    // Examples:
+    // tags: {"sanctioned":true} => DENY
+    // tags: {"frozen":true} => force mask all
+    // tags: {"blockedPlatforms":["gcp","alicloud"]} => deny if platform matches
+    if (Boolean.TRUE.equals(tags.get("sanctioned"))) return new TagDecision(true, false, "sanctioned");
+
+    Object bp = tags.get("blockedPlatforms");
+    if (bp instanceof java.util.List<?> list) {
+      for (Object o : list) {
+        if (platform != null && platform.equalsIgnoreCase(String.valueOf(o))) {
+          return new TagDecision(true, false, "blockedPlatform=" + platform);
+        }
+      }
+    }
+
+    if (Boolean.TRUE.equals(tags.get("frozen"))) return new TagDecision(false, true, "frozen");
+
+    return new TagDecision(false, false, "ok");
+  }
+}
