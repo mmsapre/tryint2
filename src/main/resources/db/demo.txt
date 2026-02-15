@@ -1,0 +1,47 @@
+create database semanticdb;
+create user semantic_user with password 'semantic_pass';
+grant all privileges on database semanticdb to semantic_user;
+
+
+mvn spring-boot:run
+
+curl -H "X-USER=u1" -H "X-CLIENT-TYPE=CONSUMER" -H "X-REGION=IN" -H "X-PLATFORM=gcp" \
+  http://localhost:8080/api/accounts/A100
+
+insert into semantic_entity_tags(dataset, entity_id, tags)
+values ('accounts-in','A100','{"frozen":true}'::jsonb);
+
+
+insert into semantic_entity_tags(dataset, entity_id, tags)
+values ('accounts-in','A100','{"blockedPlatforms":["gcp","alicloud"]}'::jsonb)
+on conflict do nothing;
+
+Human RL feedback (adaptive graph learning)
+
+Send feedback that a decision was WRONG (reward = -1), and specify the edges used:
+
+curl -X POST http://localhost:8080/human/graph/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId":"req-101",
+    "reward": -1,
+    "predicted": {"purpose":"CLIENT_REPORT","decision":"ALLOW"},
+    "corrected": {"purpose":"VIEW_ONLY","decision":"OBFUSCATE"},
+    "edges": [
+      "CLIENT_TYPE:CONSUMER->PURPOSE:CLIENT_REPORT",
+      "PURPOSE:CLIENT_REPORT->FIELD_CLASS:pii"
+    ]
+  }'
+
+curl -X POST http://localhost:8080/human/graph/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId":"req-101",
+    "reward": -1,
+    "predicted": {"purpose":"CLIENT_REPORT","decision":"ALLOW"},
+    "corrected": {"purpose":"VIEW_ONLY","decision":"OBFUSCATE"},
+    "edges": [
+      "CLIENT_TYPE:CONSUMER->PURPOSE:CLIENT_REPORT",
+      "PURPOSE:CLIENT_REPORT->FIELD_CLASS:pii"
+    ]
+  }'
