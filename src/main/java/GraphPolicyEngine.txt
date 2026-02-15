@@ -1,0 +1,46 @@
+package com.mmsapre.semantic.graph;
+
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.model.Purpose;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class GraphPolicyEngine {
+
+  private final PolicyProperties props;
+  private final AdaptiveSemanticGraphEngine graph;
+
+  public GraphPolicyEngine(PolicyProperties props, AdaptiveSemanticGraphEngine graph) {
+    this.props = props;
+    this.graph = graph;
+  }
+
+  public record GraphOutcome(Purpose effectivePurpose, List<String> usedEdges, String note) {}
+
+  public GraphOutcome evaluatePurpose(String clientType, Purpose proposed) {
+    String start = "CLIENT_TYPE:" + clientType;
+    String target = "PURPOSE:" + proposed.name();
+
+    var p = graph.bestPath(start, target, 2);
+    double min = props.getGraph().getAdaptive().getMinPathScore().getOrDefault("purpose", 0.55);
+
+    if (p.score() < min && props.getGraph().getDegradableDimensions().contains("PURPOSE")) {
+      // degrade to VIEW_ONLY
+      var pv = graph.bestPath(start, "PURPOSE:VIEW_ONLY", 2);
+      List<String> edges = new ArrayList<>(p.pathEdges());
+      edges.addAll(pv.pathEdges());
+      return new GraphOutcome(Purpose.VIEW_ONLY, edges, "Degraded purpose by score=" + p.score());
+    }
+
+    return new GraphOutcome(proposed, p.pathEdges(), "Purpose ok score=" + p.score());
+  }
+
+  public boolean purposeAllowsFieldClass(Purpose purpose, String fieldClass) {
+    var p = graph.bestPath("PURPOSE:" + purpose.name(), "FIELD_CLASS:" + fieldClass, 2);
+    double min = props.getGraph().getAdaptive().getMinPathScore().getOrDefault("fieldClass", 0.60);
+    return p.score() >= min;
+  }
+}
