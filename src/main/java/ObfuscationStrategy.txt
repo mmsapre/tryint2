@@ -1,0 +1,10 @@
+package com.mmsapre.semantic.model;
+
+public enum ObfuscationStrategy {
+  NONE, MASK, REDACT, BUCKET;
+
+  public static ObfuscationStrategy from(String s) {
+    if (s == null) return NONE;
+    return ObfuscationStrategy.valueOf(s.trim().toUpperCase());
+  }
+}
