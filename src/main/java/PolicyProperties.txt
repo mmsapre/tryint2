@@ -1,0 +1,155 @@
+package com.mmsapre.semantic.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.util.*;
+
+@ConfigurationProperties(prefix = "policy")
+public class PolicyProperties {
+
+  private double confidenceThreshold = 0.75;
+
+  private List<DatasetRule> datasetRules = new ArrayList<>();
+  private Map<String, Dataset> datasets = new HashMap<>();
+  private List<FieldRule> fieldRegistry = new ArrayList<>();
+  private Graph graph = new Graph();
+  private Obfuscation obfuscation = new Obfuscation();
+
+  public double getConfidenceThreshold() { return confidenceThreshold; }
+  public void setConfidenceThreshold(double confidenceThreshold) { this.confidenceThreshold = confidenceThreshold; }
+
+  public List<DatasetRule> getDatasetRules() { return datasetRules; }
+  public void setDatasetRules(List<DatasetRule> datasetRules) { this.datasetRules = datasetRules; }
+
+  public Map<String, Dataset> getDatasets() { return datasets; }
+  public void setDatasets(Map<String, Dataset> datasets) { this.datasets = datasets; }
+
+  public List<FieldRule> getFieldRegistry() { return fieldRegistry; }
+  public void setFieldRegistry(List<FieldRule> fieldRegistry) { this.fieldRegistry = fieldRegistry; }
+
+  public Graph getGraph() { return graph; }
+  public void setGraph(Graph graph) { this.graph = graph; }
+
+  public Obfuscation getObfuscation() { return obfuscation; }
+  public void setObfuscation(Obfuscation obfuscation) { this.obfuscation = obfuscation; }
+
+  public static class DatasetRule {
+    private Match match = new Match();
+    private Yields yields = new Yields();
+    public Match getMatch() { return match; }
+    public void setMatch(Match match) { this.match = match; }
+    public Yields getYields() { return yields; }
+    public void setYields(Yields yields) { this.yields = yields; }
+  }
+
+  public static class Match {
+    private String pathRegex;
+    public String getPathRegex() { return pathRegex; }
+    public void setPathRegex(String pathRegex) { this.pathRegex = pathRegex; }
+  }
+
+  public static class Yields {
+    private String dataset;
+    public String getDataset() { return dataset; }
+    public void setDataset(String dataset) { this.dataset = dataset; }
+  }
+
+  public static class Dataset {
+    private List<String> dataDomains = new ArrayList<>();
+    private List<String> regions = new ArrayList<>();
+    private List<String> defaultSelectFields = new ArrayList<>();
+
+    public List<String> getDataDomains() { return dataDomains; }
+    public void setDataDomains(List<String> dataDomains) { this.dataDomains = dataDomains; }
+    public List<String> getRegions() { return regions; }
+    public void setRegions(List<String> regions) { this.regions = regions; }
+    public List<String> getDefaultSelectFields() { return defaultSelectFields; }
+    public void setDefaultSelectFields(List<String> defaultSelectFields) { this.defaultSelectFields = defaultSelectFields; }
+  }
+
+  public static class FieldRule {
+    private Match match = new Match();
+    private Semantics semantics = new Semantics();
+    public Match getMatch() { return match; }
+    public void setMatch(Match match) { this.match = match; }
+    public Semantics getSemantics() { return semantics; }
+    public void setSemantics(Semantics semantics) { this.semantics = semantics; }
+  }
+
+  public static class Semantics {
+    private String fieldClass;
+    private String sensitivity;
+
+    public String getFieldClass() { return fieldClass; }
+    public void setFieldClass(String fieldClass) { this.fieldClass = fieldClass; }
+
+    public String getSensitivity() { return sensitivity; }
+    public void setSensitivity(String sensitivity) { this.sensitivity = sensitivity; }
+  }
+
+  public static class Graph {
+    private List<String> degradableDimensions = new ArrayList<>();
+    private List<String> nonDegradableDimensions = new ArrayList<>();
+    private GraphAdaptive adaptive = new GraphAdaptive();
+    private List<Edge> edges = new ArrayList<>();
+
+    public List<String> getDegradableDimensions() { return degradableDimensions; }
+    public void setDegradableDimensions(List<String> degradableDimensions) { this.degradableDimensions = degradableDimensions; }
+
+    public List<String> getNonDegradableDimensions() { return nonDegradableDimensions; }
+    public void setNonDegradableDimensions(List<String> nonDegradableDimensions) { this.nonDegradableDimensions = nonDegradableDimensions; }
+
+    public GraphAdaptive getAdaptive() { return adaptive; }
+    public void setAdaptive(GraphAdaptive adaptive) { this.adaptive = adaptive; }
+
+    public List<Edge> getEdges() { return edges; }
+    public void setEdges(List<Edge> edges) { this.edges = edges; }
+  }
+
+  public static class GraphAdaptive {
+    private Map<String, Double> minPathScore = new HashMap<>();
+    private Learning learning = new Learning();
+
+    public Map<String, Double> getMinPathScore() { return minPathScore; }
+    public void setMinPathScore(Map<String, Double> minPathScore) { this.minPathScore = minPathScore; }
+
+    public Learning getLearning() { return learning; }
+    public void setLearning(Learning learning) { this.learning = learning; }
+
+    public static class Learning {
+      private double alpha = 0.08;
+      private double minW = 0.05;
+      private double maxW = 0.99;
+
+      public double getAlpha() { return alpha; }
+      public void setAlpha(double alpha) { this.alpha = alpha; }
+
+      public double getMinW() { return minW; }
+      public void setMinW(double minW) { this.minW = minW; }
+
+      public double getMaxW() { return maxW; }
+      public void setMaxW(double maxW) { this.maxW = maxW; }
+    }
+  }
+
+  public static class Edge {
+    private String from;
+    private String to;
+    private Double weight;
+
+    public String getFrom() { return from; }
+    public void setFrom(String from) { this.from = from; }
+
+    public String getTo() { return to; }
+    public void setTo(String to) { this.to = to; }
+
+    public Double getWeight() { return weight; }
+    public void setWeight(Double weight) { this.weight = weight; }
+  }
+
+  public static class Obfuscation {
+    private Map<String, String> strategies = new HashMap<>();
+    public Map<String, String> getStrategies() { return strategies; }
+    public void setStrategies(Map<String, String> strategies) { this.strategies = strategies; }
+  }
+}
