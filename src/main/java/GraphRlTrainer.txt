@@ -1,0 +1,62 @@
+package com.mmsapre.semantic.rl;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.graph.AdaptiveSemanticGraphEngine;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class GraphRlTrainer {
+
+  private final PolicyProperties props;
+  private final AdaptiveSemanticGraphEngine graph;
+  private final JdbcTemplate jdbc;
+  private final ObjectMapper om;
+
+  public GraphRlTrainer(PolicyProperties props, AdaptiveSemanticGraphEngine graph, JdbcTemplate jdbc, ObjectMapper om) {
+    this.props = props;
+    this.graph = graph;
+    this.jdbc = jdbc;
+    this.om = om;
+  }
+
+  public void applyReward(String requestId,
+                          Map<String,Object> predicted,
+                          Map<String,Object> corrected,
+                          double reward,
+                          List<String> edges) {
+
+    double alpha = props.getGraph().getAdaptive().getLearning().getAlpha();
+
+    for (String e : edges) {
+      double oldW = edgeWeight(e);
+      double target = reward > 0 ? 1.0 : 0.0;
+      double newW = oldW + alpha * (target - oldW);
+      graph.updateEdge(e, newW);
+    }
+
+    try {
+      jdbc.update("""
+          insert into semantic_graph_feedback(request_id, predicted, corrected, reward)
+          values (?, ?::jsonb, ?::jsonb, ?)
+          """,
+          requestId,
+          om.writeValueAsString(predicted),
+          om.writeValueAsString(corrected),
+          reward
+      );
+    } catch (Exception ignored) {}
+  }
+
+  private double edgeWeight(String edgeKey) {
+    int idx = edgeKey.indexOf("->");
+    if (idx <= 0) return 0.80;
+    String from = edgeKey.substring(0, idx);
+    String to = edgeKey.substring(idx + 2);
+    return graph.weight(from, to);
+  }
+}
