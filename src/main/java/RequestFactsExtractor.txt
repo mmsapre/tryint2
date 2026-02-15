@@ -1,0 +1,77 @@
+package com.mmsapre.semantic.extract;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.model.RequestFacts;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+
+import java.util.*;
+import java.util.regex.Pattern;
+
+@Component
+public class RequestFactsExtractor {
+
+  private final PolicyProperties props;
+  private final ObjectMapper om;
+
+  public RequestFactsExtractor(PolicyProperties props, ObjectMapper om) {
+    this.props = props;
+    this.om = om;
+  }
+
+  public RequestFacts extract(ServerWebExchange ex) {
+    String requestId = UUID.randomUUID().toString();
+    String method = ex.getRequest().getMethod() != null ? ex.getRequest().getMethod().name() : "GET";
+    String path = ex.getRequest().getPath().value();
+
+    String body = (String) ex.getAttribute(BodyCachingFilter.CACHED_BODY_ATTR);
+    Set<String> keys = extractKeys(body);
+
+    String dataset = matchDataset(path);
+    String entityId = lastPathSegment(path);
+
+    return new RequestFacts(requestId, method, path, dataset, entityId, keys);
+  }
+
+  private String matchDataset(String path) {
+    for (var r : props.getDatasetRules()) {
+      String re = r.getMatch().getPathRegex();
+      if (re != null && Pattern.compile(re).matcher(path).matches()) {
+        return r.getYields().getDataset();
+      }
+    }
+    return "unknown";
+  }
+
+  private static String lastPathSegment(String path) {
+    if (path == null || path.isBlank()) return "NA";
+    String[] parts = path.split("/");
+    return parts.length == 0 ? "NA" : parts[parts.length - 1];
+  }
+
+  private Set<String> extractKeys(String body) {
+    if (body == null || body.isBlank()) return Set.of();
+    try {
+      JsonNode n = om.readTree(body);
+      Set<String> out = new HashSet<>();
+      collectKeys(n, out);
+      return out;
+    } catch (Exception e) {
+      return Set.of();
+    }
+  }
+
+  private void collectKeys(JsonNode n, Set<String> out) {
+    if (n == null) return;
+    if (n.isObject()) {
+      n.fieldNames().forEachRemaining(fn -> {
+        out.add(fn);
+        collectKeys(n.get(fn), out);
+      });
+    } else if (n.isArray()) {
+      for (JsonNode c : n) collectKeys(c, out);
+    }
+  }
+}
