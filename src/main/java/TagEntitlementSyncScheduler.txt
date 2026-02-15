@@ -1,0 +1,35 @@
+package com.mmsapre.semantic.store;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+@Component
+public class TagEntitlementSyncScheduler {
+
+  // key prefixes
+  public static final String TAG_KEY_PREFIX = "TAG:";
+  public static final String ENT_KEY_PREFIX = "ENT:";
+
+  private final PostgresTagDao tags;
+  private final PostgresEntitlementDao ent;
+  private final TagStore kv;
+
+  public TagEntitlementSyncScheduler(PostgresTagDao tags, PostgresEntitlementDao ent, TagStore kv) {
+    this.tags = tags;
+    this.ent = ent;
+    this.kv = kv;
+  }
+
+  @Scheduled(fixedDelayString = "${sync.ms:30000}")
+  public void sync() {
+    // tags
+    for (var r : tags.fetchAll()) {
+      kv.putJson(TAG_KEY_PREFIX + r.dataset() + ":" + r.entityId(), tags.parse(r.tagsJson()));
+    }
+
+    // entitlements
+    for (var r : ent.fetchAll()) {
+      kv.putJson(ENT_KEY_PREFIX + r.entityType() + ":" + r.entityId(), ent.parse(r.rulesJson()));
+    }
+  }
+}
