@@ -1,0 +1,13 @@
+package com.mmsapre.semantic.model;
+
+public record EntitlementDecision(
+    boolean deny,
+    boolean forceMaskAll,
+    boolean restrictToInternal,
+    String reason
+) {
+  public static EntitlementDecision allow() { return new EntitlementDecision(false,false,false,"allow"); }
+  public static EntitlementDecision deny(String r) { return new EntitlementDecision(true,false,false,r); }
+  public static EntitlementDecision maskAll(String r) { return new EntitlementDecision(false,true,false,r); }
+  public static EntitlementDecision internalOnly(String r) { return new EntitlementDecision(false,false,true,r); }
+}
