@@ -1,0 +1,7 @@
+package com.mmsapre.semantic.model;
+
+public record IntentResult(
+    Purpose purpose,
+    double confidence,
+    String explanation
+) {}
