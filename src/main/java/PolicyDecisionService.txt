@@ -1,0 +1,97 @@
+package com.mmsapre.semantic.engine;
+
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.graph.GraphPolicyEngine;
+import com.mmsapre.semantic.intent.CompositeIntentClassifier;
+import com.mmsapre.semantic.model.*;
+import com.mmsapre.semantic.store.AuditDao;
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+import java.util.regex.Pattern;
+
+@Component
+public class PolicyDecisionService {
+
+  private final PolicyProperties props;
+  private final CompositeIntentClassifier intentClassifier;
+  private final GraphPolicyEngine graphPolicy;
+  private final TagPolicyEngine tagPolicy;
+  private final AuditDao audit;
+
+  public PolicyDecisionService(PolicyProperties props,
+                               CompositeIntentClassifier intentClassifier,
+                               GraphPolicyEngine graphPolicy,
+                               TagPolicyEngine tagPolicy,
+                               AuditDao audit) {
+    this.props = props;
+    this.intentClassifier = intentClassifier;
+    this.graphPolicy = graphPolicy;
+    this.tagPolicy = tagPolicy;
+    this.audit = audit;
+  }
+
+  public AuthorizationDecision decide(SubjectContext subject, RequestFacts facts) {
+
+    // 1) Tag rules highest precedence
+    TagDecision td = tagPolicy.evaluate(facts.dataset(), facts.entityId(), subject.platform());
+    if (td.deny()) {
+      AuthorizationDecision d = new AuthorizationDecision(false, false, false, td.reason(), Map.of(), List.of(), null);
+      audit.audit(facts.requestId(), d);
+      return d;
+    }
+
+    // 2) Intent
+    IntentResult rawIntent = intentClassifier.classify(facts);
+
+    // 3) Adaptive graph can degrade purpose
+    var go = graphPolicy.evaluatePurpose(subject.clientType(), rawIntent.purpose());
+    IntentResult intent = new IntentResult(go.effectivePurpose(), rawIntent.confidence(), rawIntent.explanation() + " | " + go.note());
+
+    // 4) If confidence too low -> require human approval (demo: block)
+    if (intent.confidence() < props.getConfidenceThreshold()) {
+      AuthorizationDecision d = new AuthorizationDecision(false, false, true, "lowConfidence", Map.of(), go.usedEdges(), intent);
+      audit.audit(facts.requestId(), d);
+      return d;
+    }
+
+    // 5) Determine transforms by field registry + purpose->fieldClass path score
+    Map<String, String> transforms = new HashMap<>();
+
+    // if frozen => mask all (tag override)
+    if (td.forceMaskAll()) {
+      transforms.put("*", ObfuscationStrategy.REDACT.name());
+    }
+
+    // Based on response keys, use registry patterns and graph allowability
+    for (String key : facts.payloadKeys()) {
+      FieldSemantics sem = classify(key);
+
+      boolean allowed = graphPolicy.purposeAllowsFieldClass(intent.purpose(), sem.fieldClass());
+      if (!allowed && props.getGraph().getDegradableDimensions().contains("FIELD_CLASS")) {
+        // degrade/obfuscate that field
+        transforms.put(key, ObfuscationStrategy.REDACT.name());
+        continue;
+      }
+
+      // allowed: apply configured strategy per fieldClass
+      String strat = props.getObfuscation().getStrategies().getOrDefault(sem.fieldClass(), "NONE");
+      if (!"NONE".equalsIgnoreCase(strat)) transforms.put(key, strat.toUpperCase());
+    }
+
+    boolean obfuscate = !transforms.isEmpty();
+    AuthorizationDecision d = new AuthorizationDecision(true, obfuscate, false, "allow", transforms, go.usedEdges(), intent);
+    audit.audit(facts.requestId(), d);
+    return d;
+  }
+
+  private FieldSemantics classify(String key) {
+    for (var r : props.getFieldRegistry()) {
+      String re = r.getMatch().getPathRegex();
+      if (re != null && Pattern.compile(re, Pattern.CASE_INSENSITIVE).matcher(key).matches()) {
+        return new FieldSemantics(r.getSemantics().getFieldClass(), r.getSemantics().getSensitivity());
+      }
+    }
+    return new FieldSemantics("derived", "LOW");
+  }
+}
