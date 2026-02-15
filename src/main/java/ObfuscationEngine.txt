@@ -1,0 +1,92 @@
+package com.mmsapre.semantic.engine;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.*;
+import com.mmsapre.semantic.model.ObfuscationStrategy;
+import org.springframework.stereotype.Component;
+
+import java.util.Iterator;
+import java.util.Map;
+
+@Component
+public class ObfuscationEngine {
+
+  private final ObjectMapper om;
+
+  public ObfuscationEngine(ObjectMapper om) {
+    this.om = om;
+  }
+
+  public String obfuscateJson(String json, Map<String, String> transforms) {
+    try {
+      JsonNode root = om.readTree(json);
+      JsonNode out = rewrite(root, transforms);
+      return om.writeValueAsString(out);
+    } catch (Exception e) {
+      return json;
+    }
+  }
+
+  private JsonNode rewrite(JsonNode n, Map<String, String> transforms) {
+    if (n == null) return NullNode.getInstance();
+
+    if (n.isObject()) {
+      ObjectNode obj = (ObjectNode) n.deepCopy();
+      Iterator<Map.Entry<String, JsonNode>> it = obj.fields();
+      while (it.hasNext()) {
+        var e = it.next();
+        String k = e.getKey();
+        JsonNode v = e.getValue();
+
+        String global = transforms.get("*");
+        String local = transforms.get(k);
+        String s = local != null ? local : global;
+
+        if (s != null) {
+          ObfuscationStrategy st = ObfuscationStrategy.from(s);
+          obj.set(k, apply(st, v));
+        } else {
+          obj.set(k, rewrite(v, transforms));
+        }
+      }
+      return obj;
+    }
+
+    if (n.isArray()) {
+      ArrayNode arr = (ArrayNode) n.deepCopy();
+      for (int i = 0; i < arr.size(); i++) {
+        arr.set(i, rewrite(arr.get(i), transforms));
+      }
+      return arr;
+    }
+
+    return n;
+  }
+
+  private JsonNode apply(ObfuscationStrategy st, JsonNode v) {
+    return switch (st) {
+      case NONE -> v;
+      case REDACT -> TextNode.valueOf("REDACTED");
+      case MASK -> TextNode.valueOf(mask(v.asText()));
+      case BUCKET -> bucket(v);
+    };
+  }
+
+  private String mask(String s) {
+    if (s == null) return "****";
+    if (s.length() <= 4) return "****";
+    return "****" + s.substring(s.length() - 4);
+  }
+
+  private JsonNode bucket(JsonNode v) {
+    if (v.isNumber()) {
+      double d = v.asDouble();
+      if (d < 1000) return TextNode.valueOf("<1k");
+      if (d < 10000) return TextNode.valueOf("1k-10k");
+      if (d < 100000) return TextNode.valueOf("10k-100k");
+      return TextNode.valueOf(">=100k");
+    }
+    return TextNode.valueOf("BUCKETED");
+  }
+}
