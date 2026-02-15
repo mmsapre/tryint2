@@ -1,0 +1,26 @@
+package com.mmsapre.semantic.intent;
+
+import com.mmsapre.semantic.model.IntentResult;
+import com.mmsapre.semantic.model.Purpose;
+import com.mmsapre.semantic.model.RequestFacts;
+import org.springframework.stereotype.Component;
+
+@Component
+public class RuleIntentClassifier {
+
+  public IntentResult classify(RequestFacts f) {
+    // General REST heuristics (not ES-specific):
+    // GET -> view only (high confidence)
+    if ("GET".equalsIgnoreCase(f.method())) {
+      return new IntentResult(Purpose.VIEW_ONLY, 0.92, "Rule: GET implies VIEW_ONLY");
+    }
+
+    // POST/PUT/PATCH -> more sensitive; likely client report / data use
+    if ("POST".equalsIgnoreCase(f.method()) || "PUT".equalsIgnoreCase(f.method()) || "PATCH".equalsIgnoreCase(f.method())) {
+      double c = f.payloadKeys().isEmpty() ? 0.65 : 0.72;
+      return new IntentResult(Purpose.CLIENT_REPORT, c, "Rule: write-like method implies CLIENT_REPORT");
+    }
+
+    return new IntentResult(Purpose.VIEW_ONLY, 0.70, "Rule: default");
+  }
+}
