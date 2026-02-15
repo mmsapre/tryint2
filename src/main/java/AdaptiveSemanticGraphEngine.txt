@@ -1,0 +1,93 @@
+package com.mmsapre.semantic.graph;
+
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.store.GraphEdgeWeightDao;
+import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PostConstruct;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Component
+public class AdaptiveSemanticGraphEngine {
+
+  private final PolicyProperties props;
+  private final GraphEdgeWeightDao dao;
+
+  private final Map<String, List<String>> adj = new HashMap<>();
+  private final Map<String, Double> w = new ConcurrentHashMap<>();
+
+  public AdaptiveSemanticGraphEngine(PolicyProperties props, GraphEdgeWeightDao dao) {
+    this.props = props;
+    this.dao = dao;
+  }
+
+  @PostConstruct
+  public void init() {
+    for (var e : props.getGraph().getEdges()) {
+      adj.computeIfAbsent(e.getFrom(), k -> new ArrayList<>()).add(e.getTo());
+    }
+
+    Map<String, Double> db = dao.loadAll();
+    for (var e : props.getGraph().getEdges()) {
+      String key = edgeKey(e.getFrom(), e.getTo());
+      double seed = e.getWeight() != null ? clamp(e.getWeight(), 0.05, 0.99) : 0.80;
+      double val = db.getOrDefault(key, seed);
+      w.put(key, val);
+      if (!db.containsKey(key)) dao.upsert(key, val);
+    }
+  }
+
+  public record PathScore(double score, List<String> pathEdges) {}
+
+  public PathScore bestPath(String start, String targetExact, int maxHops) {
+    record Node(String id, double cost, List<String> edges) {}
+
+    PriorityQueue<Node> pq = new PriorityQueue<>(Comparator.comparingDouble(Node::cost));
+    pq.add(new Node(start, 0.0, List.of()));
+
+    Map<String, Double> bestCost = new HashMap<>();
+    bestCost.put(start, 0.0);
+
+    while (!pq.isEmpty()) {
+      Node cur = pq.poll();
+      if (cur.id.equals(targetExact)) {
+        return new PathScore(Math.exp(-cur.cost), cur.edges);
+      }
+      if (cur.edges.size() >= maxHops) continue;
+
+      for (String nxt : adj.getOrDefault(cur.id, List.of())) {
+        double edgeW = weight(cur.id, nxt);
+        double edgeCost = -Math.log(Math.max(1e-9, edgeW));
+        double newCost = cur.cost + edgeCost;
+
+        if (newCost < bestCost.getOrDefault(nxt, Double.POSITIVE_INFINITY)) {
+          List<String> newEdges = new ArrayList<>(cur.edges);
+          newEdges.add(edgeKey(cur.id, nxt));
+          bestCost.put(nxt, newCost);
+          pq.add(new Node(nxt, newCost, newEdges));
+        }
+      }
+    }
+
+    return new PathScore(0.0, List.of());
+  }
+
+  public double weight(String from, String to) {
+    return w.getOrDefault(edgeKey(from, to), 0.80);
+  }
+
+  public void updateEdge(String edgeKey, double newWeight) {
+    double clamped = clamp(newWeight,
+        props.getGraph().getAdaptive().getLearning().getMinW(),
+        props.getGraph().getAdaptive().getLearning().getMaxW());
+    w.put(edgeKey, clamped);
+    dao.upsert(edgeKey, clamped);
+  }
+
+  public static String edgeKey(String from, String to) { return from + "->" + to; }
+
+  private static double clamp(double v, double lo, double hi) {
+    return Math.max(lo, Math.min(hi, v));
+  }
+}
