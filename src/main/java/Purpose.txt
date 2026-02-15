@@ -1,0 +1,7 @@
+package com.mmsapre.semantic.model;
+
+public enum Purpose {
+  VIEW_ONLY,
+  CLIENT_REPORT,
+  INTERNAL_REPORT
+}
