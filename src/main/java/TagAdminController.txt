@@ -1,0 +1,27 @@
+package com.mmsapre.semantic.admin;
+
+import com.mmsapre.semantic.store.PostgresTagDao;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/admin/tags")
+public class TagAdminController {
+
+  private final PostgresTagDao dao;
+
+  public TagAdminController(PostgresTagDao dao) { this.dao = dao; }
+
+  /**
+   * POST body:
+   * { "dataset":"accounts-in", "entityId":"A100", "tags":{"frozen":true,"blockedPlatforms":["gcp"]} }
+   */
+  @PostMapping
+  public void upsert(@RequestBody Map<String,Object> body) {
+    String dataset = String.valueOf(body.get("dataset"));
+    String entityId = String.valueOf(body.get("entityId"));
+    Map<String,Object> tags = (Map<String,Object>) body.get("tags");
+    dao.upsert(dataset, entityId, tags);
+  }
+}
