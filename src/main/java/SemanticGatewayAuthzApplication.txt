@@ -1,0 +1,17 @@
+package com.mmsapre.semantic;
+
+import com.mmsapre.semantic.config.PolicyProperties;
+import com.mmsapre.semantic.config.RocksDbProperties;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+@EnableConfigurationProperties({PolicyProperties.class, RocksDbProperties.class})
+public class SemanticGatewayAuthzApplication {
+  public static void main(String[] args) {
+    SpringApplication.run(SemanticGatewayAuthzApplication.class, args);
+  }
+}
