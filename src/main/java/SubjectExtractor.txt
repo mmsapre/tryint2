@@ -1,0 +1,56 @@
+package com.mmsapre.semantic.extract;
+
+import com.mmsapre.semantic.model.SubjectContext;
+import com.nimbusds.jwt.SignedJWT;
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+
+import java.security.cert.X509Certificate;
+
+@Component
+public class SubjectExtractor {
+
+  public SubjectContext extract(ServerWebExchange ex) {
+    // 1) Try mTLS certificate (if configured in server)
+    X509Certificate[] chain = ex.getRequest().getSslInfo() != null
+        ? ex.getRequest().getSslInfo().getPeerCertificates()
+        : null;
+
+    if (chain != null && chain.length > 0) {
+      String dn = chain[0].getSubjectX500Principal().getName();
+      // demo mapping from DN -> userId/clientType/region/platform
+      return new SubjectContext("x509:" + dn, "CONSUMER", header(ex, "X-REGION", "IN"), header(ex, "X-PLATFORM", "internal"));
+    }
+
+    // 2) Try JWT Bearer
+    String auth = ex.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+    if (auth != null && auth.startsWith("Bearer ")) {
+      String token = auth.substring("Bearer ".length());
+      try {
+        SignedJWT jwt = SignedJWT.parse(token);
+        String sub = String.valueOf(jwt.getJWTClaimsSet().getSubject());
+        String region = String.valueOf(jwt.getJWTClaimsSet().getClaim("region"));
+        String clientType = String.valueOf(jwt.getJWTClaimsSet().getClaim("clientType"));
+        String platform = String.valueOf(jwt.getJWTClaimsSet().getClaim("platform"));
+        return new SubjectContext(sub,
+            clientType == null || clientType.equals("null") ? "CONSUMER" : clientType,
+            region == null || region.equals("null") ? "IN" : region,
+            platform == null || platform.equals("null") ? "internal" : platform);
+      } catch (Exception ignored) {}
+    }
+
+    // 3) Fallback headers (easy demo)
+    return new SubjectContext(
+        header(ex, "X-USER", "demoUser"),
+        header(ex, "X-CLIENT-TYPE", "CONSUMER"),
+        header(ex, "X-REGION", "IN"),
+        header(ex, "X-PLATFORM", "gcp")
+    );
+  }
+
+  private static String header(ServerWebExchange ex, String name, String def) {
+    String v = ex.getRequest().getHeaders().getFirst(name);
+    return v == null ? def : v;
+  }
+}
