@@ -1,0 +1,33 @@
+package com.mmsapre.semantic.demo;
+
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/backend")
+public class BackendDemoController {
+
+  @GetMapping("/accounts/{id}")
+  public Map<String,Object> account(@PathVariable String id) {
+    return Map.of(
+        "account_id", id,
+        "client_id", "C100",
+        "email", "user@test.com",
+        "balance", 125000,
+        "country", "IN",
+        "city", "Pune"
+    );
+  }
+
+  @GetMapping("/instruments/{id}")
+  public Map<String,Object> instr(@PathVariable String id) {
+    return Map.of(
+        "instrument_id", id,
+        "isin", "IN0000TEST",
+        "cusip", "12345678",
+        "issuer", "IssuerX",
+        "country", "GLOBAL"
+    );
+  }
+}
