@@ -1,0 +1,110 @@
+server:
+  port: 8080
+
+spring:
+  main:
+    web-application-type: reactive
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/semanticdb
+    username: semantic_user
+    password: semantic_pass
+    driver-class-name: org.postgresql.Driver
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+
+  cloud:
+    gateway:
+      routes:
+        - id: demo-backend
+          uri: http://localhost:${server.port}
+          predicates:
+            - Path=/api/**
+          filters:
+            - RewritePath=/api/(?<segment>.*), /backend/${segment}
+
+rocksdb:
+  path: ./tagdb
+
+tag:
+  sync:
+    ms: 30000
+
+policy:
+  confidenceThreshold: 0.75
+
+  datasetRules:
+    - match: { pathRegex: "/api/accounts/.*" }
+      yields: { dataset: "accounts-in" }
+    - match: { pathRegex: "/api/instruments/.*" }
+      yields: { dataset: "instruments-global" }
+    - match: { pathRegex: "/api/customers/.*" }
+      yields: { dataset: "customer-in" }
+    - match: { pathRegex: "/api/party/.*" }
+      yields: { dataset: "party-eu" }
+
+  datasets:
+    accounts-in:
+      dataDomains: [accounts]
+      regions: [IN]
+      defaultSelectFields: [account_id, client_id, email, balance, country, city]
+
+    customer-in:
+      dataDomains: [customer]
+      regions: [IN]
+      defaultSelectFields: [customer_id, name, email, pan, country]
+
+    party-eu:
+      dataDomains: [party]
+      regions: [EU]
+      defaultSelectFields: [party_id, party_name, lei, country]
+
+    instruments-global:
+      dataDomains: [instruments]
+      regions: [GLOBAL]
+      defaultSelectFields: [instrument_id, isin, cusip, issuer, country]
+
+  fieldRegistry:
+    - match: { pathRegex: ".*email.*|.*pan.*|.*name.*|.*addr.*|.*city.*|.*phone.*" }
+      semantics: { fieldClass: pii, sensitivity: VERY_HIGH }
+    - match: { pathRegex: ".*account.*|.*client.*|.*customer.*|.*party.*|.*isin.*|.*cusip.*|.*lei.*" }
+      semantics: { fieldClass: identifier, sensitivity: HIGH }
+    - match: { pathRegex: ".*balance.*|.*amount.*|.*notional.*|.*qty.*|.*market_value.*" }
+      semantics: { fieldClass: financial, sensitivity: MEDIUM }
+    - match: { pathRegex: ".*country.*|.*issuer.*|.*region.*|.*type.*|.*status.*" }
+      semantics: { fieldClass: derived, sensitivity: LOW }
+
+  graph:
+    degradableDimensions: [PURPOSE, FIELD_CLASS]
+    nonDegradableDimensions: [REGION, DATA_DOMAIN]
+
+    adaptive:
+      minPathScore:
+        purpose: 0.55
+        fieldClass: 0.60
+      learning:
+        alpha: 0.08
+        minW: 0.05
+        maxW: 0.99
+
+    edges:
+      - { from: "CLIENT_TYPE:CONSUMER", to: "PURPOSE:CLIENT_REPORT", weight: 0.75 }
+      - { from: "CLIENT_TYPE:CONSUMER", to: "PURPOSE:VIEW_ONLY",    weight: 0.90 }
+      - { from: "CLIENT_TYPE:INTERNAL",  to: "PURPOSE:INTERNAL_REPORT", weight: 0.85 }
+
+      - { from: "PURPOSE:CLIENT_REPORT", to: "FIELD_CLASS:pii", weight: 0.70 }
+      - { from: "PURPOSE:CLIENT_REPORT", to: "FIELD_CLASS:identifier", weight: 0.80 }
+      - { from: "PURPOSE:CLIENT_REPORT", to: "FIELD_CLASS:financial", weight: 0.85 }
+      - { from: "PURPOSE:CLIENT_REPORT", to: "FIELD_CLASS:derived", weight: 0.90 }
+
+      - { from: "PURPOSE:VIEW_ONLY", to: "FIELD_CLASS:derived", weight: 0.95 }
+
+  obfuscation:
+    strategies:
+      pii: MASK
+      identifier: REDACT
+      financial: BUCKET
+      derived: NONE
