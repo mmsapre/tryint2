@@ -1,0 +1,32 @@
+package com.mmsapre.semantic.human;
+
+import com.mmsapre.semantic.rl.GraphRlTrainer;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/human/graph")
+public class GraphFeedbackController {
+
+  private final GraphRlTrainer trainer;
+
+  public GraphFeedbackController(GraphRlTrainer trainer) {
+    this.trainer = trainer;
+  }
+
+  @PostMapping("/feedback")
+  public void feedback(@RequestBody Map<String,Object> body) {
+
+    String requestId = String.valueOf(body.getOrDefault("requestId",""));
+    double reward = Double.parseDouble(String.valueOf(body.getOrDefault("reward","0")));
+
+    Map<String,Object> predicted = (Map<String,Object>) body.getOrDefault("predicted", Map.of());
+    Map<String,Object> corrected = (Map<String,Object>) body.getOrDefault("corrected", Map.of());
+
+    List<String> edges = (List<String>) body.getOrDefault("edges", List.of());
+
+    trainer.applyReward(requestId, predicted, corrected, reward, edges);
+  }
+}
