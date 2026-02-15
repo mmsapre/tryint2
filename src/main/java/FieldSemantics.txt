@@ -1,0 +1,6 @@
+package com.mmsapre.semantic.model;
+
+public record FieldSemantics(
+    String fieldClass,
+    String sensitivity
+) {}
