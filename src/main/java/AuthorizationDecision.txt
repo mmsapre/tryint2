@@ -1,0 +1,14 @@
+package com.mmsapre.semantic.model;
+
+import java.util.List;
+import java.util.Map;
+
+public record AuthorizationDecision(
+    boolean allow,
+    boolean obfuscate,
+    boolean pendingApproval,
+    String reason,
+    Map<String, String> fieldTransforms,   // fieldName -> strategy
+    List<String> usedEdges,                // for RL feedback
+    IntentResult intent
+) {}
