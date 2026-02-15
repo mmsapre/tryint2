@@ -1,0 +1,8 @@
+package com.mmsapre.semantic.model;
+
+public record SubjectContext(
+    String userId,
+    String clientType, // CONSUMER / INTERNAL
+    String region,     // IN / EU / GLOBAL etc.
+    String platform    // gcp / alicloud / internal (optional)
+) {}
