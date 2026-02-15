@@ -1,0 +1,79 @@
+package com.mmsapre.semantic.engine;
+
+import com.mmsapre.semantic.model.EntitlementDecision;
+import com.mmsapre.semantic.model.EntitlementRule;
+import com.mmsapre.semantic.model.SubjectContext;
+import com.mmsapre.semantic.store.TagEntitlementSyncScheduler;
+import com.mmsapre.semantic.store.TagStore;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class EntitlementPolicyEngine {
+
+  private final TagStore kv;
+
+  public EntitlementPolicyEngine(TagStore kv) {
+    this.kv = kv;
+  }
+
+  public EntitlementDecision evaluate(SubjectContext subject, String entityType, String entityId) {
+    Map<String,Object> rules = kv.getJson(TagEntitlementSyncScheduler.ENT_KEY_PREFIX + entityType + ":" + entityId);
+    if (rules.isEmpty()) return EntitlementDecision.allow();
+
+    // expected JSON format:
+    // {
+    //  "tags": {"sanctioned":true,"frozen":false,"blocked":false},
+    //  "restrictions":{"allowedClouds":["internal"],"allowedRegions":["EU","IN"],"license":{...}},
+    //  "priority": 100
+    // }
+
+    Map<String,Object> tags = map(rules.get("tags"));
+    Map<String,Object> res  = map(rules.get("restrictions"));
+
+    boolean sanctioned = Boolean.TRUE.equals(tags.get("sanctioned"));
+    if (sanctioned) return EntitlementDecision.deny("entitlement:sanctioned");
+
+    boolean blocked = Boolean.TRUE.equals(tags.get("blocked"));
+    if (blocked) return EntitlementDecision.deny("entitlement:blocked");
+
+    // cloud restriction
+    List<String> allowedClouds = list(res.get("allowedClouds"));
+    if (!allowedClouds.isEmpty()) {
+      boolean ok = allowedClouds.stream().anyMatch(c -> c.equalsIgnoreCase(subject.platform()));
+      if (!ok) return EntitlementDecision.deny("entitlement:cloudNotAllowed=" + subject.platform());
+    }
+
+    // region restriction
+    List<String> allowedRegions = list(res.get("allowedRegions"));
+    if (!allowedRegions.isEmpty()) {
+      boolean ok = allowedRegions.stream().anyMatch(r -> r.equalsIgnoreCase(subject.region()));
+      if (!ok) return EntitlementDecision.deny("entitlement:regionNotAllowed=" + subject.region());
+    }
+
+    // frozen => mask all
+    boolean frozen = Boolean.TRUE.equals(tags.get("frozen"));
+    if (frozen) return EntitlementDecision.maskAll("entitlement:frozen");
+
+    // license example: internal-only
+    Map<String,Object> lic = map(res.get("license"));
+    Object allowExternal = lic.get("allowExternal");
+    if (allowExternal instanceof Boolean b && !b) {
+      // if consumer on cloud => block; if internal => allow but restrict
+      if ("CONSUMER".equalsIgnoreCase(subject.clientType()) && !"internal".equalsIgnoreCase(subject.platform())) {
+        return EntitlementDecision.deny("entitlement:licenseInternalOnly");
+      }
+      return EntitlementDecision.internalOnly("entitlement:licenseInternalOnly");
+    }
+
+    return EntitlementDecision.allow();
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String,Object> map(Object o) { return (o instanceof Map<?,?> m) ? (Map<String,Object>) m : Map.of(); }
+
+  @SuppressWarnings("unchecked")
+  private List<String> list(Object o) { return (o instanceof List<?> l) ? (List<String>) l : List.of(); }
+}
