@@ -1,0 +1,7 @@
+package com.mmsapre.semantic.model;
+
+public record TagDecision(
+    boolean deny,
+    boolean forceMaskAll,
+    String reason
+) {}
