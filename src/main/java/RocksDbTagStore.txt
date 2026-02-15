@@ -1,0 +1,37 @@
+package com.mmsapre.semantic.store;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.rocksdb.RocksDB;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+@Component
+public class RocksDbTagStore implements TagStore {
+
+  private final RocksDB db;
+  private final ObjectMapper om;
+
+  public RocksDbTagStore(RocksDB db, ObjectMapper om) {
+    this.db = db;
+    this.om = om;
+  }
+
+  @Override
+  public Map<String, Object> get(String key) {
+    try {
+      byte[] b = db.get(key.getBytes());
+      if (b == null) return Map.of();
+      return om.readValue(b, Map.class);
+    } catch (Exception e) {
+      return Map.of();
+    }
+  }
+
+  @Override
+  public void put(String key, Map<String, Object> value) {
+    try {
+      db.put(key.getBytes(), om.writeValueAsBytes(value));
+    } catch (Exception ignored) {}
+  }
+}
