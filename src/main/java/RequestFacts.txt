@@ -1,0 +1,12 @@
+package com.mmsapre.semantic.model;
+
+import java.util.Set;
+
+public record RequestFacts(
+    String requestId,
+    String method,
+    String path,
+    String dataset,
+    String entityId,
+    Set<String> payloadKeys
+) {}
