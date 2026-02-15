@@ -1,0 +1,26 @@
+package com.mmsapre.semantic.admin;
+
+import com.mmsapre.semantic.graph.AdaptiveSemanticGraphEngine;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/admin/graph")
+public class GraphAdminController {
+
+  private final AdaptiveSemanticGraphEngine graph;
+
+  public GraphAdminController(AdaptiveSemanticGraphEngine graph) { this.graph = graph; }
+
+  /**
+   * POST body:
+   * { "edgeKey":"CLIENT_TYPE:CONSUMER->PURPOSE:CLIENT_REPORT", "weight":0.62 }
+   */
+  @PostMapping("/edgeWeight")
+  public void setWeight(@RequestBody Map<String,Object> body) {
+    String edgeKey = String.valueOf(body.get("edgeKey"));
+    double weight = Double.parseDouble(String.valueOf(body.get("weight")));
+    graph.updateEdge(edgeKey, weight);
+  }
+}
