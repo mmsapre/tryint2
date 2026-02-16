@@ -1,0 +1,101 @@
+server:
+  port: 8080
+
+spring:
+  main:
+    web-application-type: reactive
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/semanticdb
+    username: semantic_user
+    password: semantic_pass
+    driver-class-name: org.postgresql.Driver
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+
+  cloud:
+    gateway:
+      routes:
+        - id: demo-backend
+          uri: http://localhost:${server.port}
+          predicates:
+            - Path=/api/**
+          filters:
+            - RewritePath=/api/(?<segment>.*), /backend/${segment}
+
+security:
+  jwtEnabled: false
+  x509Enabled: false
+
+store:
+  type: memory   # memory | rocksdb | hazelcast | sqlite | microraft
+  rocksdbPath: ./kvdb
+  hazelcastClusterName: semantic-policy
+  sqlitePath: ./kv.sqlite
+
+sync:
+  tagsMs: 30000
+  entitlementsMs: 30000
+  semanticsMs: 60000
+  graphWeightsMs: 10000
+  intentRulesMs: 60000
+
+policy:
+  confidenceThreshold: 0.75
+  denyOnNonDegradableMismatch: true
+
+  datasetRules:
+    - pathRegex: "/api/accounts/.*"
+      dataset: "accounts-in"
+    - pathRegex: "/api/instruments/.*"
+      dataset: "instruments-global"
+    - pathRegex: "/api/customers/.*"
+      dataset: "customer-in"
+    - pathRegex: "/api/party/.*"
+      dataset: "party-eu"
+
+  datasets:
+    accounts-in:
+      dataDomains: [accounts]
+      regions: [IN]
+    customer-in:
+      dataDomains: [customer]
+      regions: [IN]
+    party-eu:
+      dataDomains: [party]
+      regions: [EU]
+    instruments-global:
+      dataDomains: [instruments]
+      regions: [GLOBAL]
+
+  graph:
+    degradableDimensions: [PURPOSE, FIELD_CLASS]
+    nonDegradableDimensions: [REGION, DATA_DOMAIN]
+    edges:
+      - { from: "CLIENT_TYPE:CONSUMER", to: "PURPOSE:CLIENT_REPORT" }
+      - { from: "CLIENT_TYPE:CONSUMER", to: "PURPOSE:VIEW_ONLY" }
+      - { from: "CLIENT_TYPE:INTERNAL",  to: "PURPOSE:INTERNAL_REPORT" }
+      - { from: "CLIENT_TYPE:INTERNAL",  to: "PURPOSE:INTERNAL_OPERATION" }
+
+      - { from: "PURPOSE:VIEW_ONLY",       to: "FIELD_CLASS:derived" }
+      - { from: "PURPOSE:CLIENT_REPORT",   to: "FIELD_CLASS:identifier" }
+      - { from: "PURPOSE:CLIENT_REPORT",   to: "FIELD_CLASS:pii" }
+      - { from: "PURPOSE:CLIENT_REPORT",   to: "FIELD_CLASS:financial" }
+      - { from: "PURPOSE:INTERNAL_REPORT", to: "FIELD_CLASS:identifier" }
+      - { from: "PURPOSE:INTERNAL_REPORT", to: "FIELD_CLASS:financial" }
+      - { from: "PURPOSE:INTERNAL_REPORT", to: "FIELD_CLASS:derived" }
+
+  obfuscation:
+    strategies:
+      pii: MASK
+      identifier: REDACT
+      financial: BUCKET
+      derived: NONE
+
+intent:
+  aiEnabled: false
+  aiBaseUrl: http://localhost:9001
+  aiPath: /intent/classify
